@@ -1,0 +1,4 @@
+node_modules/
+.state/
+*.log
+test/e2e/node_modules/

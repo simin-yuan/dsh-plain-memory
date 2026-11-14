@@ -1,0 +1,48 @@
+{
+  "name": "dsh-plain-memory",
+  "version": "1.0.0",
+  "description": "原味记忆（plain memory）：DSH 原生的轻记忆。记忆是纯 Markdown，放在你自己的 Git 仓库；多窗口状态卡（实验性，默认关闭）；需要时想得起来。零运行时依赖、零模型调用、零周期定时器。",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "memory.js",
+    "git.js",
+    "cards.js",
+    "locale",
+    "template",
+    "prompts",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/simin-yuan/dsh-plain-memory.git"
+  },
+  "homepage": "https://github.com/simin-yuan/dsh-plain-memory#readme",
+  "author": "Simin Yuan",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "memory"],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.1.0",
+    "@deepseek-ai/dsh-tools": ">=0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": ">=0.2.2-rc.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": { "optional": true },
+    "@deepseek-ai/dsh-tools": { "optional": true },
+    "@deepseek-ai/dsh-llm": { "optional": true }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,5 @@
+# dsh-plain-memory bundle layer: inserts the Host plugin into the profile.
+# Install with `dsh plugin --profile <name> add <path-or-package>`.
+- insert:
+    - id: plain-memory
+      name: 'dsh-plain-memory'

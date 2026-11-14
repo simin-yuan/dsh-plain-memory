@@ -1,0 +1,9 @@
+{
+  "name": "dsh-plain-memory-e2e",
+  "private": true,
+  "type": "module",
+  "description": "端到端测试用：只装一个脚本化的假模型服务器，和插件运行时无关。",
+  "dependencies": {
+    "@deepseek-ai/dsh-llm-mock-server": "0.2.2-rc.1"
+  }
+}
