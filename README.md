@@ -1,5 +1,8 @@
 # dsh-plain-memory · 原味记忆
 
+[![npm version](https://img.shields.io/npm/v/dsh-plain-memory.svg)](https://www.npmjs.com/package/dsh-plain-memory)
+[![license](https://img.shields.io/npm/l/dsh-plain-memory.svg)](LICENSE)
+
 [English](README.en.md) | 中文
 
 DSH 原生的轻记忆。**拔掉它，DSH 一点没变；装上它，DSH 记得你、需要时想得起来。**

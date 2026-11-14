@@ -1,5 +1,8 @@
 # dsh-plain-memory
 
+[![npm version](https://img.shields.io/npm/v/dsh-plain-memory.svg)](https://www.npmjs.com/package/dsh-plain-memory)
+[![license](https://img.shields.io/npm/l/dsh-plain-memory.svg)](LICENSE)
+
 [中文](README.md) | English
 
 Plain memory for DeepSeek Harness. **Remove it and DSH is unchanged; install it and DSH remembers you and recalls what matters.**
