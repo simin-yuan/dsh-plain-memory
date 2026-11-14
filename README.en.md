@@ -1,14 +1,14 @@
 # dsh-plain-memory
 
-中文 | [English](README.en.md)
+[中文](README.md) | English
 
-Plain memory for DeepSeek Harness. **Remove it and DSH is unchanged; install it and DSH remembers you, sees your other windows, and recalls what matters.**
+Plain memory for DeepSeek Harness. **Remove it and DSH is unchanged; install it and DSH remembers you and recalls what matters.**
 
 Memory is plain Markdown in your own Git repository. The plugin is 1,141 lines, imports only Node built-ins, calls no model, and runs no periodic timer.
 
 ## What it does
 
-1. **Asset** — memory lives as Markdown in your private repo; the plugin pulls at session start and commits+pushed writes at session boundaries.
+1. **Asset** — memory lives as Markdown in your private repo; the plugin pulls at session start, commits each write immediately, and pushes in a detached process.
 2. **Multiple windows (experimental, off by default)** — enable with `cards: true`; sessions then exchange a short delta when their cues match. Off by default because a stale card from an already-closed window was observed being pushed back.
 3. **Recall** — each memory carries cue words; every turn matches the user message locally (BM25 over Chinese bigrams plus a small hand-written concept bridge) and injects at most three entries, only above threshold.
 
