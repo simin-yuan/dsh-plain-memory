@@ -5,27 +5,32 @@
 
 [中文](README.md) | English
 
-Plain memory for DeepSeek Harness. **Remove it and DSH is unchanged; install it and DSH remembers you and recalls what matters.**
+Plain memory for DeepSeek Harness. **Remove it and DSH is unchanged; install it and DSH keeps what you told it, and can look it up when asked.**
 
-Memory is plain Markdown in your own Git repository. The plugin is 1,141 lines, imports only Node built-ins, calls no model, and runs no periodic timer.
+Memory is plain Markdown in your own Git repository. The plugin is 1,423 lines (blank lines included), imports only Node built-ins, calls no model, and runs no periodic timer.
 
 ## What it does
 
-1. **Asset** — memory lives as Markdown in your private repo; the plugin pulls at session start, commits each write immediately, and pushes in a detached process.
-2. **Multiple windows (experimental, off by default)** — enable with `cards: true`; sessions then exchange a short delta when their cues match. Off by default because a stale card from an already-closed window was observed being pushed back.
-3. **Recall** — each memory carries cue words; every turn matches the user message locally (BM25 over Chinese bigrams plus a small hand-written concept bridge) and injects at most three entries, only above threshold.
+Three things, nothing more:
+
+1. **Asset** — memory lives as Markdown in your own repo; the plugin pulls at session start, commits each write immediately, and pushes in a detached process.
+2. **Query** — four tools; `memory_recall` reads memory by keyword. This is the default path: **nothing is injected on any turn.** The model calls it when the user refers to earlier work, another window, "last time", or "before".
+3. **Optional auto-recall** — set `autoRecall: true` and each turn matches the user message locally (BM25 over Chinese bigrams plus a small hand-written concept bridge), injecting at most three entries above threshold. **Off by default; why, below.**
+
+**Experimental: multi-window status cards (off by default, `cards: true`)** — sessions exchange a short delta when their cues match. Off by default because a stale card from an already-closed window was observed being pushed back.
 
 ## Measured properties
 
 | Property | Value |
 |---|---|
-| Plugin source | **1,045 lines** (excluding tests) |
+| Plugin source | **1,423 lines** including blank lines (excluding tests) |
 | Runtime dependencies | **0** |
 | Model calls inside the plugin | **0** |
 | Periodic timers / resident processes | **0** |
-| Fixed per-session injection | **≈596 tokens** (four tool schemas) |
+| Fixed per-session injection | **≈487 tokens** (four tool schemas; measured on 1.0.1, schema unchanged since) |
+| Injection per turn by default | **0 entries** (`autoRecall` is off) |
 | Injection when nothing matches | **zero** |
-| One recalled entry | **≈124 tokens** |
+| One recalled entry (only with `autoRecall`) | **≈124 tokens** |
 | Uninstall | DSH boots normally; the memory repo is untouched byte for byte |
 
 Measured against a real `headless` profile with a scripted mock model server, from the actual `/v1/messages` request bodies. See `test/e2e/measure.mjs`. Token counts are estimates, not a provider tokenizer.
@@ -33,9 +38,14 @@ Measured against a real `headless` profile with a scripted mock model server, fr
 ## Verification
 
 - **Prompt cache**: over three consecutive turns in one session, turn 2's message array is a byte-identical prefix of turn 3's; injection only appends.
-- **Cross-domain recall**: 5/5 probes hit, 0 false recalls on 6 unrelated questions — note that probes and concept bridge share an author, so this is not independent validation.
 - **Git does not block**: with an unreachable remote the turn takes 3,051 ms vs 2,989 ms baseline (−62 ms); push runs in a detached child.
 - **Concurrency**: two processes writing ten entries each land 20/20, one commit, clean tree.
+
+### Auto-recall, when you enable it
+
+Offline replay over 40 days of real queries: injected items 192 → 24, zero-injection turns 29% → 87%, one repeated deadline entry 15 hits → 1. Then 20 injected memories were hand-labelled: **precision 7/20**. At that precision a default-on injection is a net negative, which is why it ships off.
+
+With auto-recall on, the cross-domain probe (5 "experience in one vocabulary, ask in another" pairs) hit 5/5 with 0 false recalls on 6 unrelated questions — but the probes and the concept bridge share an author, so this is **not** independent validation, and that run used the older `minCues=1` default (2 since 1.1.0).
 
 ## Install
 
@@ -73,4 +83,5 @@ Restart DSH. **Rollback**: delete that row, `dsh plugin --profile desktop remove
 ## License
 
 MIT
+
 
