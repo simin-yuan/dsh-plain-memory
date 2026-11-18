@@ -1,4 +1,4 @@
-// 插件装配自测：用假 ctx / 假 agent 驱动真实的 apply()，覆盖注入、卡片、工具、git。
+﻿// 插件装配自测：用假 ctx / 假 agent 驱动真实的 apply()，覆盖注入、卡片、工具、git。
 // 用法：node test/plugin.test.mjs
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -69,7 +69,7 @@ try {
       { agent: A },
     )
     assert.match(out, /已写入 semantic/)
-    const decision = await preStep(listeners, A, '这个插件的注入是怎么实现的？')
+    const decision = await preStep(listeners, A, '这个插件的注入是怎么实现的？缓存会失效吗？')
     const msgs = injected(decision)
     assert.equal(msgs.length, 1)
     assert.match(msgs[0].content[0].text, /DSH 注入点/)
@@ -82,7 +82,7 @@ try {
   })
 
   await check('非首步不重复注入', async () => {
-    const decision = await preStep(listeners, A, '这个插件的注入是怎么实现的？', 2)
+    const decision = await preStep(listeners, A, '这个插件的注入是怎么实现的？缓存会失效吗？', 2)
     assert.equal(injected(decision).length, 0)
   })
 
@@ -221,6 +221,24 @@ try {
     assert.equal(readRepo(repo).length, before + 1)
   })
 
+  await check('自我层写满后拒绝写入，而不是显示时截断', async () => {
+    const said = {
+      session: {
+        id: 'sess-FFFF0000', header: { cwd: project }, seq: 1,
+        eventAt: () => ({ type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: '记住：这些规则都要生效。' }] } }),
+      },
+    }
+    const long = '这是一条很长的长期偏好规则，必须每条都生效。'.repeat(12)
+    await tools.get('memory_write').execute({ layer: 'self', title: '长规则甲', body: long }, { agent: said })
+    await assert.rejects(
+      tools.get('memory_write').execute({ layer: 'self', title: '长规则乙', body: long }, { agent: said }),
+      /自我层已超预算/,
+    )
+    // 显示时一条都不丢：已写进去的规则必须在 AGENTS.md 托管块里
+    const block = readFileSync(join(testHome, 'AGENTS.md'), 'utf8')
+    assert.match(block, /这是一条很长的长期偏好规则/)
+  })
+
   await check('同一窗口同一条记忆只注入一次', async () => {
     const E = agent('sess-EEEEEEEE', project)
     const first = await preStep(listeners, E, '注入会破坏缓存吗？')
@@ -233,3 +251,4 @@ try {
 } finally {
   rmSync(repo, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 }
+

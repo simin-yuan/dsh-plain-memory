@@ -1,4 +1,4 @@
-# dsh-plain-memory
+﻿# dsh-plain-memory
 
 [![npm version](https://img.shields.io/npm/v/dsh-plain-memory.svg)](https://www.npmjs.com/package/dsh-plain-memory)
 [![license](https://img.shields.io/npm/l/dsh-plain-memory.svg)](LICENSE)
@@ -63,7 +63,7 @@ Restart DSH. **Rollback**: delete that row, `dsh plugin --profile desktop remove
 
 - The concept bridge is a hand-written word list (23 groups, capped at 50), not a semantic model.
 - Status cards only travel between sessions on the same Git branch or sharing changed files.
-- Consolidation is a DSH `schedule` task you create yourself; the plugin has no background logic.
+- Consolidation is optional and manual: paste `prompts/daily-consolidate.md` into a normal session when you want it. No scheduler, no timers.
 - Chinese is tokenised into character bigrams; no dictionary or segmenter.
 
 ## Tools
@@ -73,3 +73,4 @@ Restart DSH. **Rollback**: delete that row, `dsh plugin --profile desktop remove
 ## License
 
 MIT
+

@@ -1,5 +1,5 @@
-// 单元自测：不依赖 DSH，直接验证记忆仓内核。用法：node test/core.test.mjs
-import { mkdtempSync, rmSync } from 'node:fs'
+﻿// 单元自测：不依赖 DSH，直接验证记忆仓内核。用法：node test/core.test.mjs
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
@@ -34,9 +34,26 @@ try {
   check('中文二元组召回', () => {
     const entries = readRepo(repo)
     const index = buildIndex(entries)
-    const hits = recall(index, '这个插件的注入是怎么做的？', 3, 0.5)
+    const hits = recall(index, 'pre-step 注入是怎么实现的？', 3, 0.3)
     assert.ok(hits.length >= 1)
     assert.equal(hits[0].entry.title, 'DSH 注入点')
+  })
+
+  check('单个线索不召回（默认要 2 个独立线索）', () => {
+    const index = buildIndex(readRepo(repo))
+    const hits = recall(index, '注入', 3, 0.3)
+    assert.equal(hits.length, 0)
+  })
+
+  check('过期记忆不召回', () => {
+    writeFileSync(join(repo, 'semantic', 'expired.md'),
+      '### 过期的截止日\n- id: sem-exp\n- date: 2026-01-01\n- session: s\n- cues: 截止, 交稿\n- expires: 2000-01-01\n\n交稿截止日是 2000-01-01。\n')
+    const index = buildIndex(readRepo(repo))
+    const hits = recall(index, '交稿截止是哪天？', 3, 0.2)
+    assert.ok(!hits.some((h) => h.entry.id === 'sem-exp'))
+    const kept = recall(index, '交稿截止是哪天？', 3, 0.2, 1)
+    assert.ok(!kept.some((h) => h.entry.id === 'sem-exp'), '过期条目在低阈值下也不该出现')
+    rmSync(join(repo, 'semantic', 'expired.md'), { force: true })
   })
 
   check('无关消息不召回', () => {
@@ -49,7 +66,7 @@ try {
     appendEntry(repo, { id: 'sem-a', layer: 'semantic', title: '甲', date: '2026-11-13', session: 's', cues: ['阿尔法'], related: ['sem-b'], body: '甲的内容' })
     appendEntry(repo, { id: 'sem-b', layer: 'semantic', title: '乙', date: '2026-11-13', session: 's', cues: ['贝塔'], related: [], body: '乙的内容' })
     const index = buildIndex(readRepo(repo))
-    const hits = recall(index, '阿尔法', 3, 0.5)
+    const hits = recall(index, '阿尔法', 3, 0.5, 1)
     assert.ok(hits.some((h) => h.entry.id === 'sem-b' && h.hop))
   })
 
@@ -73,3 +90,5 @@ try {
 } finally {
   rmSync(repo, { recursive: true, force: true })
 }
+
+

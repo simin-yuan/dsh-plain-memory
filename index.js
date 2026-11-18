@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 原味记忆（dsh-plain-memory）· DSH 原生记忆插件。
  *
  * 三件事，一样不多：
@@ -17,7 +17,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   appendEntry, buildIndex, entryId, estimateTokens, findSecret, formatEntry, readRepo,
-  recallAll, slug, splitCues, summarize, today, tokenize,
+  recallAll, slug, splitCues, summarize, today, tokenize, MIN_MATCHED_TERMS,
 } from './memory.js'
 import { branchOf, commit, isDirty, isRepo, pull, pushBackground } from './git.js'
 import { ensureState, readCards, writeCard } from './cards.js'
@@ -50,10 +50,11 @@ export function normalizeConfig(config = {}) {
     maxRecall: Math.min(5, positive(config.maxRecall, 3)),
     minScore: positive(config.minScore, 0.3),
     cardScore: positive(config.cardScore, 0.3),
-    // 默认 1（一个线索即可）；调成 2 会明显更安静，但实测会把跨领域召回从 5/5 压到 2/5
     // 多窗口状态卡默认关闭（实验性）：只写卡、不推送时，/state 里不会多出任何注入
     cards: config.cards === true,
-    minCues: positive(config.minCues, 1),
+    // 默认 2：至少两个独立线索才算想起来（与 memory.js 的 MIN_MATCHED_TERMS 一致）。
+    // 默认 1 等于「碰上一个词就注入」，生产日志里大部分噪声从这里来。
+    minCues: positive(config.minCues, MIN_MATCHED_TERMS),
   }
 }
 
@@ -90,15 +91,30 @@ function agentsFile() {
 export function renderSelfBlock(repo) {
   const entries = readRepo(repo).filter((e) => e.layer === 'self')
   const lines = [SELF_BEGIN, '## 用户长期偏好（由 dsh-plain-memory 维护，按此执行）']
-  for (const e of entries) {
-    const text = (e.body || e.title).replace(/\s+/g, ' ').trim()
-    const line = `- ${text}`
-    if (estimateTokens([...lines, line, SELF_END].join('\n')) > SELF_TOKEN_BUDGET) break
-    lines.push(line)
-  }
+  for (const e of entries) lines.push(selfLine(e))
   if (lines.length === 2) return ''
   lines.push(SELF_END)
   return lines.join('\n')
+}
+
+function selfLine(entry) {
+  return `- ${(entry.body || entry.title).replace(/\s+/g, ' ').trim()}`
+}
+
+/** 自我层的预算只在「写入时」把关：显示时一条都不丢，写满了就拒绝新条目并让人合并规则。 */
+export function selfTokens(repo, extra) {
+  const entries = readRepo(repo).filter((e) => e.layer === 'self')
+  const all = extra ? [...entries, extra] : entries
+  return estimateTokens(all.map(selfLine).join('\n'))
+}
+
+export function assertSelfBudget(repo, entry) {
+  const tokens = selfTokens(repo, entry)
+  if (tokens <= SELF_TOKEN_BUDGET) return
+  throw new Error(
+    `自我层已超预算（约 ${tokens}/${SELF_TOKEN_BUDGET} token）。自我层每条都必须生效、不能在显示时截断，`
+    + '所以这里拒绝写入：请先合并或删掉 self.md 里的旧规则，再写新的。',
+  )
 }
 
 /** 只改托管块，保留 AGENTS.md 里用户自己的内容。 */
@@ -132,6 +148,26 @@ export function removeSelfBlock() {
   if (begin === -1 || end <= begin) return
   const next = `${text.slice(0, begin)}${text.slice(end + SELF_END.length)}`.replace(/\n{3,}/g, '\n\n').trimEnd()
   writeFileSync(file, next ? `${next}\n` : '', 'utf8')
+}
+
+/** 只有「明确截止日期」才自动填 expires；观察日期（某天实测）不算，否则会把有效记忆整条作废。 */
+const DEADLINE_WORDS = /(截止|到期|deadline|最晚|交付|交稿|提交日|提交截止)/i
+const DATE_RE = /\b(20\d{2})-(\d{2})-(\d{2})\b/
+
+export function detectExpiry(text) {
+  const s = String(text || '')
+  if (!DATE_RE.test(s) || !DEADLINE_WORDS.test(s)) return ''
+  DATE_RE.lastIndex = 0
+  const m = DATE_RE.exec(s)
+  DATE_RE.lastIndex = 0
+  return m ? m[0] : ''
+}
+
+function normalizeExpiry(value) {
+  const s = String(value || '').trim()
+  if (!s) return ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) throw new Error('expires 必须是 YYYY-MM-DD')
+  return s
 }
 
 function sessionKey(agent) {
@@ -225,7 +261,7 @@ export function apply(ctx, config = {}) {
       id, agent, cwd, line: '',
       files: new Set(), objective: '', conclusion: '',
       index: null, ready: false, pulled: false, isGit: false,
-      writes: 0, cardAt: 0, seenCards: new Set(), seenMem: new Set(), lastGoal: '',
+      writes: 0, cardAt: 0, seenCards: new Set(), seenMem: new Set(), pendingUsed: [], lastGoal: '',
       preSteps: 0, injected: 0, warned: new Set(), flushing: false, pendingFlush: false,
     }
     sessions.set(id, st)
@@ -309,17 +345,45 @@ export function apply(ctx, config = {}) {
     return makeUserMessage(text, name, 'recall')
   }
 
+  /** 本会话历史里注入过的内容；宿主不提供事件流时返回 null（退回进程内的 seenMem）。 */
+  function recalledHistory(st) {
+    const session = st.agent?.session
+    if (!session || typeof session.eventAt !== 'function' || typeof session.seq !== 'number') return null
+    const parts = []
+    const from = Math.max(0, session.seq - 400)
+    for (let i = from; i < session.seq; i += 1) {
+      let event
+      try { event = session.eventAt(i) } catch { continue }
+      if (event?.type !== 'user/message') continue
+      const data = event.data || {}
+      const text = (data.content || []).map((b) => b?.text || '').join('\n')
+      // source.kind 在部分宿主会被归一，认内容标记更稳
+      if (data.source?.kind !== name && !text.includes(HEADER.trim().split('\n')[0])) continue
+      parts.push(text)
+    }
+    return parts.join('\n')
+  }
+
   async function recallLines(st, text) {
+    // 自动注入不按句切开（切句会让三个字的一段碰到一个词就拿高分），概念桥与关联跳转只留给主动查询
+    const hits = recallAll(st.index, text, opts.maxRecall, opts.minScore, opts.minCues, { split: false, hop: false })
+    // 去重不存状态：直接看标题是否已在本会话历史里出现过，进程重启也不会重复注入
+    const history = recalledHistory(st)
+    const kept = []
+    const titles = new Set()
     const lines = []
-    const hits = recallAll(st.index, text, opts.maxRecall, opts.minScore, opts.minCues)
-      .filter((h) => !st.seenMem.has(h.entry.id))
     for (const hit of hits) {
       const e = hit.entry
+      if (titles.has(e.title)) continue
+      const dup = history === null ? st.seenMem.has(e.id) : history.includes(e.title)
+      if (dup) continue
+      titles.add(e.title)
+      if (history === null) st.seenMem.add(e.id)
+      kept.push(hit)
       const label = hit.hop ? '关联' : e.layer === 'self' ? '自我' : e.layer === 'episodic' ? '情景' : '语义'
       lines.push(`[${label}] ${e.title}（${e.date || '无日期'}，会话 ${shortId(e.session)}）：${summarize(e, 140)}`)
-      st.seenMem.add(e.id)
     }
-    return { lines, hits }
+    return { lines, hits: kept }
   }
 
   /** 会话里最后一条真人消息；判断「用户是不是亲口说了记住」。 */
@@ -340,22 +404,76 @@ export function apply(ctx, config = {}) {
     return /记住|记下|记住这|以后都|以后不要|以后别|别再/.test(lastUserText(agent))
   }
 
-  /** 观察日志：每次注入记一行，第 7 天据此统计误召回。relevant 留空由人补。 */
+  /**
+   * 观察日志：每次注入记一行（`hits` 是命中的词，`relevant` 留空由人补）。
+   * 「有没有用上」由下一轮或回合结束另起一行补 `used`：模型回答里出现该条正文的 ≥2 个特征词才算用上，
+   * 证据不足就记 null，不猜。两行都只记聚合事实，不记正文内容。
+   */
+  const FEATURE_MAX = 24
+  function featuresOf(entry) {
+    return [...new Set(tokenize(`${entry.title} ${entry.body}`))].filter((t) => !t.startsWith('+')).slice(0, FEATURE_MAX)
+  }
+
   function logRecall(st, text, hits, cardCount) {
     try {
+      const at = new Date().toISOString()
       const line = JSON.stringify({
-        at: new Date().toISOString(),
+        at,
         session: shortId(st.id),
-        q: text.replace(/\s+/g, ' ').slice(0, 120),
+        q: text.replace(/\s+/g, ' ').slice(0, 600),
         ids: hits.map((h) => h.entry.id),
         titles: hits.map((h) => h.entry.title),
         scores: hits.map((h) => Number(h.score.toFixed(3))),
+        hits: hits.map((h) => h.terms || []),
         hop: hits.filter((h) => h.hop).length,
         cards: cardCount,
         relevant: null,
       })
       appendFileSync(join(ensureState(opts.repoPath), 'recall.log'), `${line}\n`, 'utf8')
+      if (hits.length) {
+        st.pendingUsed.push({
+          at,
+          session: shortId(st.id),
+          ids: hits.map((h) => h.entry.id),
+          features: hits.map((h) => featuresOf(h.entry)),
+          fromSeq: Number(st.agent?.session?.seq ?? 0),
+        })
+        if (st.pendingUsed.length > 3) st.pendingUsed.shift()
+      }
     } catch (error) { log('recall log failed', String(error)) }
+  }
+
+  /** 注入之后产生的模型回答文本；没有事件流就返回 null。 */
+  function assistantTextAfter(st, fromSeq) {
+    const session = st.agent?.session
+    if (!session || typeof session.eventAt !== 'function' || typeof session.seq !== 'number') return null
+    const parts = []
+    for (let i = Math.max(0, fromSeq); i < session.seq; i += 1) {
+      let event
+      try { event = session.eventAt(i) } catch { continue }
+      if (!String(event?.type || '').startsWith('assistant')) continue
+      for (const b of event.data?.content || []) if (b?.type === 'text') parts.push(b.text)
+    }
+    return parts.join('\n')
+  }
+
+  function finalizeUsed(st) {
+    if (!st.pendingUsed.length) return
+    const pending = st.pendingUsed
+    st.pendingUsed = []
+    for (const p of pending) {
+      const text = assistantTextAfter(st, p.fromSeq)
+      const used = text === null || !text.trim()
+        ? p.ids.map(() => null)
+        : p.features.map((f) => f.filter((t) => text.includes(t)).length >= 2)
+      try {
+        appendFileSync(
+          join(ensureState(opts.repoPath), 'recall.log'),
+          `${JSON.stringify({ at: p.at, session: p.session, ids: p.ids, used, via: text === null ? 'no-events' : 'events' })}\n`,
+          'utf8',
+        )
+      } catch { /* 日志失败不影响主流程 */ }
+    }
   }
 
   /**
@@ -484,6 +602,7 @@ export function apply(ctx, config = {}) {
       st.preSteps += 1
       st.lastGoal = text.split('\n').find((l) => l.trim())?.trim().slice(0, 60) || ''
       auditInjection(st)
+      finalizeUsed(st)
       touchCard(st)
       const recalled = await recallLines(st, text)
       const cards = opts.cards ? cardLines(st, text) : []
@@ -518,6 +637,7 @@ export function apply(ctx, config = {}) {
     const st = sessions.get(sessionKey(agent))
     if (!st) { trace(`turn-stopping unknown session=${shortId(sessionKey(agent))}`); return }
     trace(`turn-stopping session=${shortId(st.id)} writes=${st.writes} preSteps=${st.preSteps}`)
+    finalizeUsed(st)
     if (st.preSteps === 0) {
       warnOnce(st, 'hook-not-fired', '会话有回合结束，但 agent/pre-step 一次都没触发；记忆注入未生效')
     }
@@ -561,6 +681,7 @@ export function apply(ctx, config = {}) {
         body: { type: 'string', description: '记忆正文，不超过 600 字' },
         cues: { type: 'string', description: '线索词，逗号分隔，最多 12 个' },
         related: { type: 'string', description: '关联条目 id，逗号分隔' },
+        expires: { type: 'string', description: '可选，YYYY-MM-DD。这条记忆到期后不再被自动召回；只有带截止日期的事才填' },
       },
     },
     output: textOutput,
@@ -579,12 +700,15 @@ export function apply(ctx, config = {}) {
       const layer = args.layer
       const date = today()
       const title = args.title.trim()
+      const expires = normalizeExpiry(args.expires) || detectExpiry(`${title}\n${body}`)
       const entry = {
         id: entryId(layer, title, date), layer, title, date, session: st.id,
         cues: splitCues(args.cues || '').slice(0, 12),
         related: splitCues(args.related || ''),
         body,
+        expires,
       }
+      if (layer === 'self') assertSelfBudget(opts.repoPath, entry)
       const rel = appendEntry(opts.repoPath, entry)
       st.index = buildIndex(readRepo(opts.repoPath).filter((e) => e.layer !== 'self'))
       st.writes += 1
@@ -614,10 +738,12 @@ export function apply(ctx, config = {}) {
       const file = join(dir, 'pending', `${String(args?.id || '').replace(/[^\w.-]/g, '')}.json`)
       if (!existsSync(file)) throw new Error(`找不到提案 ${args?.id}`)
       const p = JSON.parse(readFileSync(file, 'utf8'))
-      appendEntry(opts.repoPath, {
+      const entry = {
         id: entryId('self', p.title, p.date), layer: 'self', title: p.title, date: p.date,
         session: p.session, cues: p.cues, related: [], body: p.body,
-      })
+      }
+      assertSelfBudget(opts.repoPath, entry)
+      appendEntry(opts.repoPath, entry)
       rmSync(file, { force: true })
       st.index = buildIndex(readRepo(opts.repoPath).filter((e) => e.layer !== 'self'))
       st.writes += 1
@@ -665,7 +791,7 @@ export function apply(ctx, config = {}) {
     async execute(args, exec) {
       if (typeof args?.query !== 'string' || !args.query.trim()) throw new Error('query 不能为空')
       const st = await ensureSession(exec.agent)
-      const hits = recallAll(st.index, args.query, 5, 0.2, 1)
+      const hits = recallAll(st.index, args.query, 5, 0.2, 1, { split: true, hop: true })
       if (hits.length === 0) return '记忆仓里没有匹配的条目。'
       return hits.map((h) => `[${h.entry.layer}] ${h.entry.title}（${h.entry.date || '无日期'}）\n${h.entry.body}`).join('\n\n')
     },
@@ -684,3 +810,4 @@ export function apply(ctx, config = {}) {
 }
 
 export { formatEntry, slug, splitCues }
+

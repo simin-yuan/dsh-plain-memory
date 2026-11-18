@@ -52,6 +52,7 @@ function metadata(entry) {
   ]
   if (entry.cues && entry.cues.length) lines.push(`- cues: ${entry.cues.join(', ')}`)
   if (entry.related && entry.related.length) lines.push(`- related: ${entry.related.join(', ')}`)
+  if (entry.expires) lines.push(`- expires: ${entry.expires}`)
   return lines.join('\n')
 }
 
@@ -78,7 +79,7 @@ function headerFor(layer) {
     : ''
 }
 
-const META = /^- (id|date|session|cues|related):\s*(.*)$/
+const META = /^- (id|date|session|cues|related|expires):\s*(.*)$/
 
 /** 解析一个 Markdown 文件里的全部条目。HTML 注释整段跳过，避免把示例当成记忆。 */
 export function parseMarkdown(text, file, layer) {
@@ -120,6 +121,7 @@ export function parseMarkdown(text, file, layer) {
     session: e.meta.session || '',
     cues: splitCues(e.meta.cues || ''),
     related: splitCues(e.meta.related || ''),
+    expires: e.meta.expires || '',
     body: e.bodyLines.join('\n').trim(),
     file: e.file,
   }))
@@ -254,10 +256,20 @@ function idf(index, term) {
  * 「两个独立线索」：一条记忆至少要有 2 个不同的匹配词才算想起来。
  * 记忆少的时候 IDF 分不开常用词和关键词，单个泛词（记忆/工具/下周）也能过阈值；
  * 人回忆时也是两三个线索同时对上才确定。只命中 1 个词 → 不注入，模型仍可主动 memory_recall。
- * @returns {{entry: object, score: number, hop: boolean}[]}
+ *
+ * 概念桥 token（`+xxx`）只做同义词折算、参与打分，**不算独立线索**：
+ * 否则「窗口/会话/测试」这类词出现在任何一条记忆里，就把整条拉进阈值。
+ *
+ * 带 `expires` 且已过期的记忆整条跳过：过期的日期型记忆再准也没用，还会反复冒出来。
+ * @returns {{entry: object, score: number, hop: boolean, matched: number, terms: string[]}[]}
  */
-export function recall(index, text, limit, minScore = 0.3, minMatched = 1) {
+export function expired(entry, now = today()) {
+  return Boolean(entry?.expires) && String(entry.expires) < now
+}
+
+export function recall(index, text, limit, minScore = 0.3, minMatched = MIN_MATCHED_TERMS, withHop = true, countConcept = false) {
   if (!index || index.size === 0) return []
+  const now = today()
   const terms = [...new Set(tokenize(text))].filter((t) => {
     if (!informative(t)) return false
     const df = index.df.get(t)
@@ -272,7 +284,9 @@ export function recall(index, text, limit, minScore = 0.3, minMatched = 1) {
   const lower = String(text || '').toLowerCase()
   const at = new Map(terms.map((t) => [t, t.startsWith('+') ? -1 : lower.indexOf(t)]))
   const independent = (matchedTerms) => {
-    const sorted = [...matchedTerms].sort((a, b) => (at.get(a) ?? -1) - (at.get(b) ?? -1))
+    const sorted = [...matchedTerms]
+      .filter((t) => countConcept || !t.startsWith('+'))
+      .sort((a, b) => (at.get(a) ?? -1) - (at.get(b) ?? -1))
     let n = 0
     let end = -1
     for (const t of sorted) {
@@ -285,6 +299,7 @@ export function recall(index, text, limit, minScore = 0.3, minMatched = 1) {
     return n
   }
   const scored = index.docs
+    .filter((doc) => !expired(doc.entry, now))
     .map((doc) => {
       let acc = 0
       const hits = []
@@ -294,19 +309,20 @@ export function recall(index, text, limit, minScore = 0.3, minMatched = 1) {
         hits.push(t)
         acc += idf(index, t) * weightOf(t) * (tf / (tf + K1 * (1 - B + (B * doc.len) / index.avgdl)))
       }
-      return { entry: doc.entry, score: acc / total, matched: independent(hits) }
+      return { entry: doc.entry, score: acc / total, matched: independent(hits), terms: hits }
     })
     .filter((r) => r.score >= minScore && r.matched >= minMatched)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
   const out = scored.map((r) => ({ ...r, hop: false }))
+  if (!withHop) return out
   const seen = new Set(out.map((r) => r.entry.id))
   for (const hit of scored) {
     for (const rel of hit.entry.related) {
       const linked = index.byId.get(rel)
       if (!linked || seen.has(linked.id)) continue
       seen.add(linked.id)
-      out.push({ entry: linked, score: hit.score * 0.5, hop: true })
+      out.push({ entry: linked, score: hit.score * 0.5, hop: true, matched: 0, terms: [] })
       break
     }
   }
@@ -317,16 +333,21 @@ export function recall(index, text, limit, minScore = 0.3, minMatched = 1) {
  * 长消息按句子切开分别召回，再按条目合并取最高分。
  * 十个问题挤在一条消息里时，整段当查询会被稀释到阈值以下；切开就恢复成十个短查询。
  * 整段也保留一次，避免跨句的主题被漏掉。
- * @returns {{entry: object, score: number, hop: boolean}[]}
+ *
+ * **只有主动查询（memory_recall）才切开。** 自动注入不切：
+ * 切句会让「三个字的一段刚好碰上一个词」拿到接近 1.0 的分，是生产日志里噪声的主要来源。
+ * @param {{split?: boolean, hop?: boolean}} [options]
+ * @returns {{entry: object, score: number, hop: boolean, matched: number, terms: string[]}[]}
  */
-export function recallAll(index, text, limit, minScore = 0.3, minMatched = 1) {
+export function recallAll(index, text, limit, minScore = 0.3, minMatched = MIN_MATCHED_TERMS, options = {}) {
   if (!index || index.size === 0) return []
+  const { split = true, hop = true, countConcept = false } = options
   const raw = String(text || '')
-  const segments = raw.split(/[。！？!?；;\n]+/).map((s) => s.trim()).filter((s) => s.length >= 2)
-  const queries = [...segments.slice(0, 12), raw]
+  const segments = split ? raw.split(/[。！？!?；;\n]+/).map((s) => s.trim()).filter((s) => s.length >= 2) : []
+  const queries = split ? [...segments.slice(0, 12), raw] : [raw]
   const best = new Map()
   for (const query of queries) {
-    for (const hit of recall(index, query, limit, minScore, minMatched)) {
+    for (const hit of recall(index, query, limit, minScore, minMatched, hop, countConcept)) {
       const prev = best.get(hit.entry.id)
       if (!prev || hit.score > prev.score) best.set(hit.entry.id, hit)
     }
