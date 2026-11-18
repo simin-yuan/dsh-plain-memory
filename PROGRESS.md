@@ -1,4 +1,4 @@
-﻿# 进度快照 · 2026-11-18
+# 进度快照 · 2026-11-18
 
 > **English abstract** — `dsh-plain-memory` v1.1.0 is public on GitHub and npm. Mechanisms all run: Markdown memory in a user-owned Git repo, self-layer block in `AGENTS.md`, local cue-word recall, turn-end commits. Cross-window recall is empirically confirmed. v1.1.0 is a noise-reduction release: on the same 173 real queries, offline replay drops auto-injection from 192 items to 24 and raises zero-injection turns from 50 to 151 (87%); one repeatedly mis-injected deadline entry drops from 15 hits to 1. **Recall precision is still not measured by anyone** — a 20-row sample table is attached for human labelling. Known limits and next steps below.
 
@@ -8,15 +8,15 @@
 
 ## 1. 一句话状态
 
-机制全部在跑，跨窗口与自我层**已验证**；自动召回在 1.1.0 里做了减噪（注入量降 8 倍）。**30 条真实样本人工判定结果：注入侧 7/20 对 + 2 条待复核（按最宽算也只有 9/20 = 45%，门槛 60%）未达标，被砍侧 3/10「本该想起」（干净）。** 结论：减噪方向对，但词面打分的相关信号在这个语料规模上不够用；下一阶段不再自己调参，转去收集外部用户反馈。
+机制全部在跑，跨窗口与自我层**已验证**；自动召回在 1.1.0 里做了减噪（注入量降 8 倍）。**30 条真实样本人工判定结果：注入侧 7/20 对 + 2 条待复核（按最宽算也只有 9/20 = 45%，门槛 60%）未达标，被砍侧 3/10「本该想起」（干净）。** v1.1.0 已发布到 npm 并打 tag。结论：减噪方向对，但词面打分的相关信号在这个语料规模上不够用；下一阶段不再自己调参，转去收集外部用户反馈。
 
 ## 2. 仓库与发布
 
 | 项 | 状态 |
 |---|---|
 | 代码仓 | `github.com/simin-yuan/dsh-plain-memory`（public，默认分支 `main`） |
-| npm | `dsh-plain-memory@1.0.1` 已发布（2026-11-14）。**1.1.0 已打包就绪、尚未发布**：本机 npm 未登录，待 Simin 在已登录的机器上 `npm publish` |
-| 发布状态 | 代码已就绪：`package.json` = 1.1.0、工作区干净、无 `scripts`；**npm 上仍是 1.0.1，1.1.0 待发布** |`r`n| 测试 | 3 个 `node --test` 文件全过；`test/e2e/` 是"真 DSH + 假模型服务器"的实测脚本 |
+| npm | **`dsh-plain-memory@1.1.0` 已发布**（2026-11-19 01:57 +08）。发布 tarball 的 `shasum` = `6f6fcd2a…`，与本仓 `90dbe51` 本地 `npm pack` 逐位一致 → npm 上那份就是这个提交打出来的。1.0.1 于 2026-11-14 发布 |
+| 发布状态 | **已发布**：npm 1.1.0、tag `v1.1.0`、工作区干净、无 `scripts` |`r`n| 测试 | 3 个 `node --test` 文件全过；`test/e2e/` 是"真 DSH + 假模型服务器"的实测脚本 |
 | 离线重放 | `test/replay-compare.mjs`：拿真实使用日志当查询集，对比召回参数（见第 5 节） |
 | 规模 | `index.js` 约 700 行、`memory.js` 约 430 行、`git.js` 119 行、`cards.js` 69 行（含注释），零运行时依赖 |
 
