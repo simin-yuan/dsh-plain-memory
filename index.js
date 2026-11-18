@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 原味记忆（dsh-plain-memory）· DSH 原生记忆插件。
  *
  * 三件事，一样不多：
@@ -111,9 +111,11 @@ export function selfTokens(repo, extra) {
 export function assertSelfBudget(repo, entry) {
   const tokens = selfTokens(repo, entry)
   if (tokens <= SELF_TOKEN_BUDGET) return
+  const file = join(repo, 'self.md')
   throw new Error(
-    `自我层已超预算（约 ${tokens}/${SELF_TOKEN_BUDGET} token）。自我层每条都必须生效、不能在显示时截断，`
-    + '所以这里拒绝写入：请先合并或删掉 self.md 里的旧规则，再写新的。',
+    `自我层已超预算（约 ${tokens}/${SELF_TOKEN_BUDGET} token），写入被拒。`
+    + `规则文件：${file}。自我层每条都必须生效、不能在显示时截断，所以这里不接收新条目——`
+    + '请用文件工具把相近的规则合并成一条后重试。',
   )
 }
 

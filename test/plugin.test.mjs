@@ -1,4 +1,4 @@
-﻿// 插件装配自测：用假 ctx / 假 agent 驱动真实的 apply()，覆盖注入、卡片、工具、git。
+// 插件装配自测：用假 ctx / 假 agent 驱动真实的 apply()，覆盖注入、卡片、工具、git。
 // 用法：node test/plugin.test.mjs
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
@@ -230,10 +230,13 @@ try {
     }
     const long = '这是一条很长的长期偏好规则，必须每条都生效。'.repeat(12)
     await tools.get('memory_write').execute({ layer: 'self', title: '长规则甲', body: long }, { agent: said })
-    await assert.rejects(
-      tools.get('memory_write').execute({ layer: 'self', title: '长规则乙', body: long }, { agent: said }),
-      /自我层已超预算/,
-    )
+    const error = await tools.get('memory_write').execute({ layer: 'self', title: '长规则乙', body: long }, { agent: said })
+      .then(() => null, (e) => e)
+    assert.ok(error, '超预算时应当拒绝写入')
+    assert.match(error.message, /自我层已超预算/)
+    assert.match(error.message, /合并/)
+    // 报错里必须给出规则文件的绝对路径，否则用户不知道改哪个文件
+    assert.ok(error.message.includes(join(repo, 'self.md')), `报错里没有 self.md 路径：${error.message}`)
     // 显示时一条都不丢：已写进去的规则必须在 AGENTS.md 托管块里
     const block = readFileSync(join(testHome, 'AGENTS.md'), 'utf8')
     assert.match(block, /这是一条很长的长期偏好规则/)
