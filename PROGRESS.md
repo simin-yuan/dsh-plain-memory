@@ -15,8 +15,8 @@
 | 项 | 状态 |
 |---|---|
 | 代码仓 | `github.com/simin-yuan/dsh-plain-memory`（public，默认分支 `main`） |
-| npm | `dsh-plain-memory@1.1.0`（1.0.1 于 2026-11-14 发布，1.1.0 于 2026-11-18） |
-| 测试 | 3 个 `node --test` 文件全过；`test/e2e/` 是"真 DSH + 假模型服务器"的实测脚本 |
+| npm | `dsh-plain-memory@1.0.1` 已发布（2026-11-14）。**1.1.0 已打包就绪、尚未发布**：本机 npm 未登录，待 Simin 在已登录的机器上 `npm publish` |
+| 发布状态 | 代码已就绪：`package.json` = 1.1.0、工作区干净、无 `scripts`；**npm 上仍是 1.0.1，1.1.0 待发布** |`r`n| 测试 | 3 个 `node --test` 文件全过；`test/e2e/` 是"真 DSH + 假模型服务器"的实测脚本 |
 | 离线重放 | `test/replay-compare.mjs`：拿真实使用日志当查询集，对比召回参数（见第 5 节） |
 | 规模 | `index.js` 约 700 行、`memory.js` 约 430 行、`git.js` 119 行、`cards.js` 69 行（含注释），零运行时依赖 |
 
@@ -102,4 +102,5 @@ node test/replay-compare.mjs <repo> <recall.log> --split=0 --min=2 --hop=0 --con
 ```
 
 日志是 JSONL：注入行含 `q ids titles scores hits hop cards relevant`；下一轮补一行 `used`（回答里是否出现该条正文 ≥2 个特征词）。统计口径：按 `ids` 计频、按首元素计 top-1、按 `(session, id)` 计重复。
+
 
