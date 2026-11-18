@@ -1,4 +1,4 @@
-﻿# dsh-plain-memory · 原味记忆
+# dsh-plain-memory · 原味记忆
 
 [![npm version](https://img.shields.io/npm/v/dsh-plain-memory.svg)](https://www.npmjs.com/package/dsh-plain-memory)
 [![license](https://img.shields.io/npm/l/dsh-plain-memory.svg)](LICENSE)
@@ -10,6 +10,8 @@ DSH 原生的轻记忆。**拔掉它，DSH 一点没变；装上它，DSH 记得
 记忆是纯 Markdown，放在你自己的 Git 仓库里。插件本体 1,141 行，只 import Node 内置模块，不调用任何模型，不起任何周期定时器。插件页显示名为「原味记忆」（`locale/zh.json`），包名与仓库名仍是 `dsh-plain-memory`。
 
 当前进度、生产实测数据与已知缺陷见 [PROGRESS.md](PROGRESS.md)（2026-11-18 快照）。
+
+**反馈入口**：[GitHub Issues](https://github.com/simin-yuan/dsh-plain-memory/issues) — 装上遇到问题、或者觉得某条记忆该被想起却没想起，都直接开 issue，附上提问原文和当时的上下文。
 
 ## 为什么又做一个记忆插件
 
@@ -49,7 +51,7 @@ DSH 原生的轻记忆。**拔掉它，DSH 一点没变；装上它，DSH 记得
 
 ## 它怎么工作
 
-**注入方式**：每轮只往消息末尾**追加**一条 user message（`agent/pre-step` 瀑布），不改 system prompt、不改历史前缀，所以提供方的提示缓存不整段失效。非首步不重复注入；没命中就什么都不加；同一条记忆在同一窗口只注入一次。
+**注入方式**（1.1.1 起默认关闭，见「自动注入默认关闭」）：每轮只往消息末尾**追加**一条 user message（`agent/pre-step` 瀑布），不改 system prompt、不改历史前缀，所以提供方的提示缓存不整段失效。非首步不重复注入；没命中就什么都不加；同一条记忆在同一窗口只注入一次。
 
 **自我层**：`self.md` 的内容同步进 `$DSH_HOME/AGENTS.md` 里一段带标记的托管块，DSH 原生在每个会话开始加载它，所以「你是谁、你的偏好」开局就在，不需要先命中一次。托管块只改标记之间那一段，`AGENTS.md` 里你自己的内容不会被碰。
 
@@ -81,9 +83,22 @@ dsh plugin --profile desktop add <本仓库路径或 git URL>
       name: 'dsh-plain-memory'
       config:
         repoPath: 'C:/Users/you/memory-repo'   # 你的记忆仓本地 clone
+        # autoRecall: true                      # 想开自动注入再加这一行（默认关闭，原因见下）
 ```
 
 重启 DSH。插件会在 `repoPath` 不存在时创建最小骨架（`README.md` + `self.md`），但**不会**替你建仓库或加远端。
+
+### 自动注入默认关闭（1.1.1 起）
+
+**默认 `autoRecall: false`：每轮不注入任何东西，记忆靠 `memory_recall` 主动查。** 自我层照常进 `AGENTS.md`，跨窗口共享照常。
+
+为什么默认关：我们拿 40 天真实使用日志做过离线重放，把噪声压到原来的 1/8 之后，抽样 20 条"被注入的记忆"人工判，**注入精度是 7/20**（两条边界项按最宽算也只有 9/20）。这个精度下，"不用主动查"的便利是负价值——每 20 次注入里有 13 次是噪声，用户第一感觉会是"乱塞东西"。所以默认安静，把开关留给想要的人。
+
+打开方式：上面 `config` 里加 `autoRecall: true`。打开后每轮按线索词召回最多 `maxRecall`（默认 3）条，追加在消息末尾，不改历史。
+
+重放数据（同一批 173 条真实提问）：注入 192 → 24 条，零注入轮次 29% → 87%，某条过期截止日记忆 15 → 1 次。
+
+## 记忆仓
 
 **回滚**：从 `cordis.patch.yml` 删掉 `id: plain-memory` 那一行，再 `dsh plugin --profile desktop remove dsh-plain-memory`，重启。记忆仓保留，DSH 行为与装之前完全一致。
 

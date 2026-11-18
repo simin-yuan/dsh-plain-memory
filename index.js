@@ -50,6 +50,9 @@ export function normalizeConfig(config = {}) {
     maxRecall: Math.min(5, positive(config.maxRecall, 3)),
     minScore: positive(config.minScore, 0.3),
     cardScore: positive(config.cardScore, 0.3),
+    // 自动注入默认关闭（1.1.1 起）：验收实测注入精度 7/20，开着等于每 20 次注入 13 次噪声。
+    // 打开 = 每轮按线索召回最多 maxRecall 条；关闭 = 每轮零注入，靠 memory_recall 主动查。
+    autoRecall: config.autoRecall === true,
     // 多窗口状态卡默认关闭（实验性）：只写卡、不推送时，/state 里不会多出任何注入
     cards: config.cards === true,
     // 默认 2：至少两个独立线索才算想起来（与 memory.js 的 MIN_MATCHED_TERMS 一致）。
@@ -606,8 +609,8 @@ export function apply(ctx, config = {}) {
       auditInjection(st)
       finalizeUsed(st)
       touchCard(st)
-      const recalled = await recallLines(st, text)
-      const cards = opts.cards ? cardLines(st, text) : []
+      const recalled = opts.autoRecall ? await recallLines(st, text) : { lines: [], hits: [] }
+      const cards = opts.autoRecall && opts.cards ? cardLines(st, text) : []
       const lines = [...recalled.lines, ...cards]
       if (lines.length === 0) return decision
       st.injected += 1
@@ -780,7 +783,7 @@ export function apply(ctx, config = {}) {
 
   ctx.tools.register({
     name: 'memory_recall',
-    description: '按关键词读记忆全文（只读）。注入被截断时用它。',
+    description: '按关键词读记忆全文（只读）。用户提到以前的工作、其他窗口、「上次」「之前」时，先调用它。自动注入默认关闭，所以它是记忆的主要入口。',
     parameters: {
       type: 'object',
       additionalProperties: false,

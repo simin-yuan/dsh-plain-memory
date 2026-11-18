@@ -54,7 +54,7 @@ try {
   mkdirSync(project, { recursive: true })
 
   const { ctx, listeners, tools } = makeCtx()
-  apply(ctx, { repoPath: repo, pullOnStart: false, pushOnTurnEnd: false, minScore: 0.5, cards: true })
+  apply(ctx, { repoPath: repo, pullOnStart: false, pushOnTurnEnd: false, minScore: 0.5, cards: true, autoRecall: true })
 
   const A = agent('sess-AAAAAAAA', project)
   const B = agent('sess-BBBBBBBB', project)
@@ -74,6 +74,20 @@ try {
     assert.equal(msgs.length, 1)
     assert.match(msgs[0].content[0].text, /DSH 注入点/)
     assert.match(msgs[0].content[0].text, /不受信任背景/)
+  })
+
+  await check('自动注入默认关闭；显式 autoRecall: true 才注入', async () => {
+    const query = '这个插件的注入是怎么实现的？缓存会失效吗？'
+    const off = makeCtx()
+    apply(off.ctx, { repoPath: repo, pullOnStart: false, pushOnTurnEnd: false, minScore: 0.3 })
+    const Z = agent('sess-ZZZZZZZZ', project)
+    assert.equal(injected(await preStep(off.listeners, Z, query)).length, 0, '默认配置不该注入')
+
+    const on = makeCtx()
+    apply(on.ctx, { repoPath: repo, pullOnStart: false, pushOnTurnEnd: false, minScore: 0.3, autoRecall: true })
+    const hits = injected(await preStep(on.listeners, Z, query))
+    assert.ok(hits.length >= 1, '打开 autoRecall 后应当注入')
+    assert.match(hits[0].content[0].text, /不受信任背景/)
   })
 
   await check('无关消息零注入', async () => {
@@ -184,7 +198,7 @@ try {
 
   await check('新实例从磁盘恢复索引并召回', async () => {
     const fresh = makeCtx()
-    apply(fresh.ctx, { repoPath: repo, pullOnStart: false, pushOnTurnEnd: false })
+    apply(fresh.ctx, { repoPath: repo, pullOnStart: false, pushOnTurnEnd: false, autoRecall: true })
     const C = agent('sess-CCCCCCCC', project)
     const decision = await preStep(fresh.listeners, C, '注入会破坏缓存吗？')
     assert.ok(injected(decision).some((m) => /KV 缓存|DSH 注入点/.test(m.content[0].text)))

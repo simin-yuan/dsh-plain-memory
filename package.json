@@ -1,6 +1,6 @@
 ﻿{
   "name": "dsh-plain-memory",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "原味记忆（plain memory）：DSH 原生的轻记忆。记忆是纯 Markdown，放在你自己的 Git 仓库；多窗口状态卡（实验性，默认关闭）；需要时想得起来。零运行时依赖、零模型调用、零周期定时器。",
   "type": "module",
   "main": "index.js",
@@ -46,4 +46,5 @@
   },
   "license": "MIT"
 }
+
 
