@@ -1,4 +1,4 @@
-# 进度快照 · 2026-11-18
+﻿# 进度快照 · 2026-11-18
 
 > **English abstract** — `dsh-plain-memory` v1.1.0 is public on GitHub and npm. Mechanisms all run: Markdown memory in a user-owned Git repo, self-layer block in `AGENTS.md`, local cue-word recall, turn-end commits. Cross-window recall is empirically confirmed. v1.1.0 is a noise-reduction release: on the same 173 real queries, offline replay drops auto-injection from 192 items to 24 and raises zero-injection turns from 50 to 151 (87%); one repeatedly mis-injected deadline entry drops from 15 hits to 1. **Recall precision is still not measured by anyone** — a 20-row sample table is attached for human labelling. Known limits and next steps below.
 
@@ -8,7 +8,7 @@
 
 ## 1. 一句话状态
 
-机制全部在跑，跨窗口与自我层**已验证**；自动召回在 1.1.0 里做了减噪（注入量降 8 倍）。**30 条真实样本人工判定结果：注入侧 9/20 对（45%，门槛 60%）未达标，被砍侧 3/10「本该想起」（干净）。** 结论：减噪方向对，但词面打分的相关信号在这个语料规模上不够用；下一阶段不再自己调参，转去收集外部用户反馈。
+机制全部在跑，跨窗口与自我层**已验证**；自动召回在 1.1.0 里做了减噪（注入量降 8 倍）。**30 条真实样本人工判定结果：注入侧 7/20 对 + 2 条待复核（按最宽算也只有 9/20 = 45%，门槛 60%）未达标，被砍侧 3/10「本该想起」（干净）。** 结论：减噪方向对，但词面打分的相关信号在这个语料规模上不够用；下一阶段不再自己调参，转去收集外部用户反馈。
 
 ## 2. 仓库与发布
 
@@ -59,12 +59,12 @@
 
 | 侧 | 判定 | 结果 |
 |---|---|---|
-| 注入 20 条 | 对 / 错 | **9 / 11（45%）**，门槛 ≥12（60%）**未达标** |
+| 注入 20 条 | 对 / ？ / 错 | **7 / 2 / 11**（按不利计 35%；两条待复核全判对也只有 9/20＝45%），门槛 ≥12（60%）**明确未达标** |
 | 被砍 10 条 | 该想起 / 不必 | **3 / 7**，回退线 ≥4（干净），中间带 |
 
 两条硬结论：
 
-1. **不是砍太多**（被砍侧只有 3/10），是**剩下的仍然一半是噪声**。
+1. **不是砍太多**（被砍侧只有 3/10），是**剩下的仍然大半是噪声**。
 2. **分数不区分相关与不相关**：判"对"的分数有 0.308/0.311/0.314/0.319/0.474/0.485/0.491/0.493/0.608，判"错"的有 0.300/0.313/0.338/0.341/0.367/0.403/0.436/0.568…两组在 0.30–0.61 完全重叠。**所以上调阈值救不了这个召回器**；噪声来自 28 条记忆上的 IDF 分不开泛词（评论/仓库/PR/确认/测试），不是阈值。
 
 ## 6. 已知缺陷（1.1.0 之后的账）
@@ -83,7 +83,7 @@
 
 | 优先级 | 事项 | 验收标准 |
 |---|---|---|
-| P1 | ~~人工判 30 条抽样~~ **已完成 2026-11-18**：注入侧 9/20、被砍侧 3/10 | 已有数字 |
+| P1 | ~~人工判 30 条抽样~~ **已完成 2026-11-18**：注入侧 7/20（+2 待复核）、被砍侧 3/10 | 已有数字 |
 | P2 | 召回打分要换路线，不是调参：28 条语料上 IDF 分不开泛词，分数不区分相关与否（见第 5 节）。候选：只保留 `memory_recall` 主动查询；或改用「关键词 / 时间 / 窗口」这类确定性信号做注入 | 同一批 30 条里注入侧 ≥12/20 对 |
 | P3 | 收集外部用户反馈（issue / 讨论帖 / npm 下载），而不是继续自测 | 有 2–3 个外部使用者各用一周 |
 
@@ -102,3 +102,4 @@ node test/replay-compare.mjs <repo> <recall.log> --split=0 --min=2 --hop=0 --con
 ```
 
 日志是 JSONL：注入行含 `q ids titles scores hits hop cards relevant`；下一轮补一行 `used`（回答里是否出现该条正文 ≥2 个特征词）。统计口径：按 `ids` 计频、按首元素计 top-1、按 `(session, id)` 计重复。
+
