@@ -1,4 +1,4 @@
-# 进度快照 · 2026-11-18
+﻿# 进度快照 · 2026-11-18
 
 > **English abstract** — `dsh-plain-memory` v1.1.0 is public on GitHub and npm. Mechanisms all run: Markdown memory in a user-owned Git repo, self-layer block in `AGENTS.md`, local cue-word recall, turn-end commits. Cross-window recall is empirically confirmed. v1.1.0 is a noise-reduction release: on the same 173 real queries, offline replay drops auto-injection from 192 items to 24 and raises zero-injection turns from 50 to 151 (87%); one repeatedly mis-injected deadline entry drops from 15 hits to 1. **Recall precision is still not measured by anyone** — a 20-row sample table is attached for human labelling. Known limits and next steps below.
 
@@ -105,5 +105,10 @@ node test/replay-compare.mjs <repo> <recall.log> --split=0 --min=2 --hop=0 --con
 ```
 
 日志是 JSONL：注入行含 `q ids titles scores hits hop cards relevant`；下一轮补一行 `used`（回答里是否出现该条正文 ≥2 个特征词）。统计口径：按 `ids` 计频、按首元素计 top-1、按 `(session, id)` 计重复。
+## 9. 事故记录（2026-11-21）：BOM 让插件三天没加载
 
-
+- **现象**：11-19 22:04 之后插件不再加载；设置页显示「包不可用 / 未运行」，报错 `Unexpected token '﻿', "﻿{ "nam"… is not valid JSON`；自我层托管块被清空，所有窗口都收不到记忆。**npm 上的 1.1.2 对任何用户都是坏的。**
+- **根因**：1.1.1/1.1.2 发版时用 PowerShell `Set-Content -Encoding utf8` 改 `package.json`，Windows PowerShell 会写 UTF-8 BOM；宿主用严格 `JSON.parse` 读包清单，BOM 直接抛错 → 整个 bundle 不可用。
+- **修法**：1.1.3 去掉 BOM；新增回归测试（`package.json` 不得以 U+FEFF 开头且必须能被 `JSON.parse` 读取）；以后改 JSON 一律用 Node 的 `fs.writeFileSync(..., 'utf8')`。
+- **遗留（未完成）**：npm 上 1.1.3 的元数据已存在，但 tarball 仍 404（registry 侧传播异常）。本机现在跑的是「1.1.2 + 手工去 BOM」的临时版本，功能与 1.1.3 相同；等 tarball 可下载后应执行 `pnpm add dsh-plain-memory@1.1.3 --registry=https://registry.npmjs.org` 并重装 bundle。
+- **教训**：测试全过 ≠ 宿主能加载。改完清单类文件要验证「宿主实际加载状态」。
