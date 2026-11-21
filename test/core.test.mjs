@@ -1,5 +1,5 @@
-﻿// 单元自测：不依赖 DSH，直接验证记忆仓内核。用法：node test/core.test.mjs
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+// 单元自测：不依赖 DSH，直接验证记忆仓内核。用法：node test/core.test.mjs
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
@@ -29,6 +29,14 @@ try {
     const entries = readRepo(repo)
     assert.equal(entries.length, 2)
     assert.equal(entries[0].layer, 'semantic')
+  })
+
+  check('package.json 无 BOM 且能被严格 JSON.parse 读取', () => {
+    const raw = readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+    assert.ok(!raw.startsWith('\uFEFF'), 'package.json 开头有 BOM；宿主的 JSON.parse 会报 "Unexpected token"，插件会显示「包不可用」')
+    const pkg = JSON.parse(raw)
+    assert.equal(pkg.name, 'dsh-plain-memory')
+    assert.ok(pkg.version, 'version 缺失')
   })
 
   check('中文二元组召回', () => {

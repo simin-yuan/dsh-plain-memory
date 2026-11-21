@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.3 — 2026-11-21
+
+**修一个把插件整体搞挂的问题：`package.json` 带 UTF-8 BOM。**
+
+- 现象：DSH 插件页显示「包不可用 / 未运行」，报错 `Unexpected token '﻿', "﻿{ "nam"... is not valid JSON`；插件从 2026-11-19 之后就没再加载过，自我层托管块也被清空。
+- 根因：1.1.1/1.1.2 发版时用 PowerShell 的 `Set-Content -Encoding utf8` 改 `package.json`，Windows PowerShell 会在开头写 BOM；宿主用严格 `JSON.parse` 读清单，**1.1.2 在 npm 上是坏的**——任何人装上都起不来。
+- 修法：`package.json` 去掉 BOM（首字节 `{`），并加一条回归测试：`package.json` 不得以 U+FEFF 开头，且必须能被 `JSON.parse` 读取。今后改版本号一律用 Node 的 `fs.writeFileSync(..., 'utf8')`，不用 PowerShell 写 JSON。
+- 无功能改动。
+
 ## 1.1.2 — 2026-11-19
 
 **默认值修正：自动注入关掉；然后把公开文档改成与代码一致。** 1.1.0 把噪声压到 1/8 之后，抽样 20 条被注入的记忆人工判，注入精度只有 **7/20**。这个精度下默认注入是负价值，所以默认关掉。本版合并了未在 npm 上发布过的 1.1.1（代码改动）与本轮文档修正。
