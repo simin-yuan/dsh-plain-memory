@@ -1,9 +1,21 @@
-﻿# dsh-plain-memory
+# dsh-plain-memory
 
 [![npm version](https://img.shields.io/npm/v/dsh-plain-memory.svg)](https://www.npmjs.com/package/dsh-plain-memory)
 [![license](https://img.shields.io/npm/l/dsh-plain-memory.svg)](LICENSE)
 
 [中文](README.md) | English
+
+## Install in three steps
+
+1. DSH 0.2.2-rc.1 or newer (the version is shown at the bottom of Settings).
+2. **Install**: Settings → Plugins → search for `dsh-plain-memory` → Install. Or one command: `dsh plugin add dsh-plain-memory`
+3. **Restart DSH.** The first write asks for a memory-repo directory (any Git repo path you own, e.g. `C:/Users/you/memory-repo`); if you skip it, the plugin creates a minimal skeleton at `repoPath`.
+
+After that: a fresh window starts with your long-term preferences already loaded (a managed block in `AGENTS.md`), and asking "what did we do last time" / "where did the other window get to" makes the model call `memory_recall`. **Auto-recall ships off** (`autoRecall: true` turns it on; why, below).
+
+### Version note
+
+**Use 1.1.3 or newer.** 1.1.2 shipped a UTF-8 BOM in `package.json`, so DSH reports the package as unavailable and never loads the plugin; 1.1.2 is deprecated on npm. 1.1.3 fixes it and adds a regression test (the manifest must not start with U+FEFF).
 
 Plain memory for DeepSeek Harness. **Remove it and DSH is unchanged; install it and DSH keeps what you told it, and can look it up when asked.**
 

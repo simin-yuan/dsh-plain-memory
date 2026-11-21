@@ -1,4 +1,4 @@
-﻿# dsh-plain-memory · 原味记忆
+# dsh-plain-memory · 原味记忆
 
 [![npm version](https://img.shields.io/npm/v/dsh-plain-memory.svg)](https://www.npmjs.com/package/dsh-plain-memory)
 [![license](https://img.shields.io/npm/l/dsh-plain-memory.svg)](LICENSE)
@@ -12,6 +12,26 @@ DSH 原生的轻记忆。**拔掉它，DSH 一点没变；装上它，DSH 记得
 当前进度、生产实测数据与已知缺陷见 [PROGRESS.md](PROGRESS.md)（2026-11-18 快照）。
 
 **反馈入口**：[GitHub Issues](https://github.com/simin-yuan/dsh-plain-memory/issues) — 装上遇到问题、或者觉得某条记忆该被想起却没想起，都直接开 issue，附上提问原文和当时的上下文。
+
+## 三步装上（不用懂 git）
+
+1. 确认 DSH 是 0.2.2-rc.1 或更新（设置页最下方能看到版本号）。
+2. **装**：设置 → 插件 → 搜索「原味记忆」或 `dsh-plain-memory` → 安装。习惯命令行的用一条命令：`dsh plugin add dsh-plain-memory`
+3. **重启 DSH**。第一次写入记忆时要给一个「记忆仓」目录（你自己的一个 Git 仓库路径，比如 `C:/Users/你/memory-repo`）；不给也行，插件会在 `repoPath` 处建最小骨架（`README.md` + `self.md`）。
+
+装好之后：新窗口开局就带着你的长期偏好与约束（写进 `AGENTS.md` 的托管块）；需要回忆时对模型说「查一下上次」「别的窗口写到哪了」，它会调用 `memory_recall` 去读。**自动召回默认关闭**（`autoRecall: true` 可开，原因见下）。
+
+### 版本与已知问题
+
+- **请用 1.1.3 或更新。** 1.1.2 的 `package.json` 带了 UTF-8 BOM，DSH 会判定「包不可用」、插件不加载；npm 上 1.1.2 已标记 deprecated。1.1.3 修掉并加了回归测试（清单不得以 U+FEFF 开头）。
+- 安装后如果设置页显示「包不可用」，先看版本号：低于 1.1.3 就是这个问题。
+
+### 数据（自测，单用户，用时 40 天）
+
+- 161 次注入事件、召回 292+ 条记忆；首周 125 次事件 / 77 个窗口 / 29 次记忆提交。
+- 人工判 30 条样本：被注入的 20 条里 **7 条判「对」**、被砍的 10 条里 3 条「本该想起」——**这就是自动注入默认关闭的原因**：精度不够时，默认注入是干扰。
+- 离线重放：注入 192 → 24 条，零注入轮次 29% → 87%。
+- 插件本体：0 运行时依赖、0 模型调用、0 定时器，1,423 行。
 
 ## 这里只做三件事
 
